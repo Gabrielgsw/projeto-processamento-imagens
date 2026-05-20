@@ -6,6 +6,7 @@ app = FastAPI()
 @app.get("/food-facts/{barcode}")
 def read_open_food_facts(barcode: str):
     
+        
     url = f"https://world.openfoodfacts.org/api/v2/product/{barcode}.json"
 
     headers = {
