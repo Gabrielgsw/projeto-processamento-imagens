@@ -31,6 +31,29 @@ def main():
         
         img_rgb = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2RGB)
         
+       #Aplicando filtro bilateral
+       
+        bilateral = cv2.bilateralFilter(gray_img, 9, 75, 75)
+        
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+
+        # Equalização adaptativa
+        imagem_clahe = clahe.apply(bilateral)
+        
+        
+        # Binarização adaptativa
+        imagem_binarizada = cv2.adaptiveThreshold(
+            imagem_clahe, 
+            255, 
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+            cv2.THRESH_BINARY, 
+            11,  # Tamanho da janela (
+            5   # Constante subtraída da média, diminui ruido
+        )
+        
+                
+        
+        
         plt.subplot(1, 2, 1)
         plt.imshow(img_rgb)
         plt.title('Imagem Original')
@@ -38,8 +61,8 @@ def main():
         
         plt.subplot(1, 2, 2)
         
-        plt.imshow(gray_img, cmap='gray')
-        plt.title('Escala de Cinza')
+        plt.imshow(imagem_binarizada, cmap='gray')
+        plt.title('Escala de Cinza, filtro bilateral e equalização do histograma e otsu')
         plt.axis('off')
         
         plt.tight_layout()
