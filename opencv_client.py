@@ -23,6 +23,8 @@ def main():
     
     if img_response.status_code == 200:
         
+        #Pré-processamento
+        
         img_array = np.frombuffer(img_response.content, np.uint8)        
         img_cv2 = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
         gray_img = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2GRAY)
@@ -62,7 +64,7 @@ def main():
         plt.subplot(1, 2, 2)
         
         plt.imshow(imagem_binarizada, cmap='gray')
-        plt.title('Escala de Cinza, filtro bilateral e equalização do histograma e otsu')
+        plt.title('Escala de Cinza, filtro bilateral, equalização adaptativa e binarização adaptativa')
         plt.axis('off')
         
         plt.tight_layout()
