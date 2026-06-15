@@ -4,9 +4,13 @@ from matplotlib import pyplot as plt
 import requests
 import pytesseract
 import re
+import os
 
 # Caminho da instalação do pytesseract
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+
+# Arquivo com um código de barras por linha
+ARQUIVO_BARCODES = "barcodes.txt"
 
 
 # Ordenação de coordenadas espaciais
@@ -142,7 +146,7 @@ def buscar_valores_api(barcode):
         return None, None
 
 # Comparação dos valores obtidos pelo ocr e dos valores obtidos via API
-def comparar_com_api(valores_ocr, energia_api, carbo_api, tolerancia=0.10): 
+def comparar_com_api(valores_ocr, energia_api, carbo_api, tolerancia=0.10):
     """
     Compara os valores extraídos pelo OCR com os da API Open Food Facts.
 
@@ -183,9 +187,30 @@ def comparar_com_api(valores_ocr, energia_api, carbo_api, tolerancia=0.10):
 
     print("=" * 54)
 
-# Fluxo principal
-def main():
-    barcode = "7898215151708" 
+
+
+# Leitura dos códigos de barras a partir de Barcodes.txt
+def carregar_barcodes(caminho: str) -> set[str]:
+   
+    if not os.path.exists(caminho):
+        print(f"[ERRO] Arquivo '{caminho}' não encontrado.")
+        return set()
+
+    barcodes = set()
+    with open(caminho, "r", encoding="utf-8") as f:
+        for linha in f:
+            codigo = linha.strip()
+            if codigo:
+                barcodes.add(codigo)
+
+    print(f" {len(barcodes)} código(s) de barras únicos carregados de '{caminho}'")
+    return barcodes
+
+
+
+# Processamento de um único rótulo 
+def processar_rotulo(barcode: str):
+    
     api_url = f"http://127.0.0.1:8000/food-facts/{barcode}"
 
     try:
@@ -204,8 +229,8 @@ def main():
             print(f"Erro: {img_response.status_code}")
             return
 
-        
-        # 1. Inicio do Pré-processamento        
+
+        # 1. Inicio do Pré-processamento
         img_array = np.frombuffer(img_response.content, np.uint8)
         img_cv2 = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
 
@@ -214,16 +239,16 @@ def main():
             return
 
         h, w = img_cv2.shape[:2]
-        
+
         # Conversão BGR -> RGB
         img_rgb = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2RGB)
-        
+
         # Tons de cinza
         gray_img = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2GRAY)
 
         # Filtro blateral
         bilateral = cv2.bilateralFilter(gray_img, 9, 75, 75)
-        
+
         # Equalização adaptativa(CLAHE)
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
         imagem_clahe = clahe.apply(bilateral)
@@ -235,16 +260,16 @@ def main():
             cv2.THRESH_BINARY, 11, 2
         )
 
-        
-        # 2. Seleção dos objetos e Extração Geométrica 
-        
-        # Canny       
+
+        # 2. Seleção dos objetos e Extração Geométrica
+
+        # Canny
         bordas_ext = cv2.Canny(imagem_binarizada, 40, 120)
-        
+
         # Fechamento
         kernel_ext = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15))
         bordas_fechadas = cv2.morphologyEx(bordas_ext, cv2.MORPH_CLOSE, kernel_ext)
-        
+
         # Busca por contornos
         contornos_ext, _ = cv2.findContours(bordas_fechadas, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -298,10 +323,10 @@ def main():
 
         h_tab, w_tab = tabela_bgr.shape[:2]
 
-        
-        # 3. Segmentação Interna (Separação Cabeçalho/Dados)        
+
+        # 3. Segmentação Interna (Separação Cabeçalho/Dados)
         gray_tab = cv2.cvtColor(tabela_bgr, cv2.COLOR_BGR2GRAY)
-        
+
         # Canny "interno"
         bordas_int = cv2.Canny(cv2.GaussianBlur(gray_tab, (3, 3), 0), 40, 120)
 
@@ -344,8 +369,8 @@ def main():
         titulo_bgr = tabela_bgr[0:y_div, :]
         dados_bgr  = tabela_bgr[y_div:h_tab, :]
 
-       
-        # 4. Inferência OCR + Extração de Nutrientes + Comparação com API        
+
+        # 4. Inferência OCR + Extração de Nutrientes + Comparação com API
         if dados_bgr.size > 0:
             texto = extrair_texto_ocr(dados_bgr)
 
@@ -360,8 +385,8 @@ def main():
         else:
             print("Matriz de dados vazia")
 
-       
-        # 5. Plotagem        
+
+        # 5. Plotagem
         imagens_plot = [
             ("1. Original", img_rgb),
             ("2. Grayscale", gray_img),
@@ -376,6 +401,7 @@ def main():
         ]
 
         plt.figure(figsize=(15, 14))
+        plt.suptitle(f"Código de barras: {barcode}", fontsize=14, fontweight="bold")
         for i, (titulo, img) in enumerate(imagens_plot):
             plt.subplot(4, 3, i + 1)
             if len(img.shape) == 2:
@@ -390,6 +416,23 @@ def main():
 
     except Exception as e:
         print(f"Erro: {e}")
+
+
+
+# Fluxo principal
+def main():
+    barcodes = carregar_barcodes(ARQUIVO_BARCODES)
+
+    if not barcodes:
+        print("[INFO] Nenhum código de barras para processar.")
+        return
+
+    for i, barcode in enumerate(barcodes, start=1):
+        print("\n" + "#" * 60)
+        print(f"# [{i}/{len(barcodes)}] Processando código de barras: {barcode}")
+        print("#" * 60)
+        processar_rotulo(barcode)
+
 
 if __name__ == "__main__":
     main()
