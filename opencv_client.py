@@ -12,6 +12,9 @@ pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tessera
 # Arquivo com um código de barras por linha
 ARQUIVO_BARCODES = "barcodes.txt"
 
+# Pasta onde as imagens originais dos rótulos serão salvas
+PASTA_IMGS = "imgs"
+
 
 # Ordenação de coordenadas espaciais
 def ordenar_pontos(pts):
@@ -189,7 +192,7 @@ def comparar_com_api(valores_ocr, energia_api, carbo_api, tolerancia=0.10):
 
 
 
-# Leitura dos códigos de barras a partir de Barcodes.txt
+# Leitura dos códigos de barras a partir do arquivo .txt
 def carregar_barcodes(caminho: str) -> set[str]:
    
     if not os.path.exists(caminho):
@@ -203,7 +206,7 @@ def carregar_barcodes(caminho: str) -> set[str]:
             if codigo:
                 barcodes.add(codigo)
 
-    print(f" {len(barcodes)} código(s) de barras únicos carregados de '{caminho}'")
+    print(f"{len(barcodes)} código(s) de barras únicos carregados de '{caminho}'")
     return barcodes
 
 
@@ -317,7 +320,7 @@ def processar_rotulo(barcode: str):
                     tabela_bgr = img_cv2[y_min:y_max, x_min:x_max]
 
         if tabela_bgr is None or tabela_bgr.size == 0:
-            print("[INFO] Fallback Supremo: Usando a imagem inteira.")
+            print("Usando a imagem inteira")
             tabela_bgr = img_cv2.copy()
             cv2.rectangle(img_poligonos_ext, (0, 0), (w-1, h-1), (0, 0, 255), 6)
 
@@ -412,11 +415,17 @@ def processar_rotulo(barcode: str):
             plt.axis('off')
 
         plt.tight_layout()
+
+        # Salva a figura em /imgs
+        os.makedirs(PASTA_IMGS, exist_ok=True)
+        caminho_img = os.path.join(PASTA_IMGS, f"{barcode}.jpg")
+        plt.savefig(caminho_img, dpi=150, bbox_inches="tight")
+        print(f"[INFO] Figura salva em '{caminho_img}'")
+
         plt.show()
 
     except Exception as e:
         print(f"Erro: {e}")
-
 
 
 # Fluxo principal
@@ -424,7 +433,7 @@ def main():
     barcodes = carregar_barcodes(ARQUIVO_BARCODES)
 
     if not barcodes:
-        print("[INFO] Nenhum código de barras para processar.")
+        print("Nenhum código de barras para processar.")
         return
 
     for i, barcode in enumerate(barcodes, start=1):
