@@ -9,7 +9,7 @@ import os
 # Caminho da instalação do pytesseract
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
-# Arquivo com um código de barras por linha
+
 ARQUIVO_BARCODES = "barcodes.txt"
 
 # Pasta onde as imagens originais dos rótulos serão salvas
@@ -82,7 +82,21 @@ def extrair_texto_ocr(imagem_dados):
         print(f"Falha no OCR: {e}")
         return None
 
-# Extração dos nutrientes desejados do texto processado pelo ocr
+# Como o OCR só funciona bem em imagens com boas resoluções, é necessário uma normalização do texto
+def normalizar_texto_ocr(texto: str) -> str:
+    
+    substituicoes = {
+        'ª': 'a',
+        'º': 'o',
+        '|': ' ',
+        '\x00': '',   
+    }
+    for errado, correto in substituicoes.items():
+        texto = texto.replace(errado, correto)
+    return texto
+
+
+
 def extrair_nutrientes_do_texto(texto):
     """
     Percorre o texto extraído pelo OCR linha a linha e busca o primeiro
@@ -96,9 +110,12 @@ def extrair_nutrientes_do_texto(texto):
     if not texto:
         return {}
 
+    # Normaliza o que foi obtido pelo tesseract
+    texto = normalizar_texto_ocr(texto)
+
     padroes = {
         "Valor energético": [r"va[lt]or", r"energ", r"kcal", r"keal"],
-        "Carboidratos":     [r"carboidr", r"carho", r"arbo"],
+        "Carboidratos":     [r"carboidr", r"carbo", r"arbo"],
     }
 
     resultado = {}
@@ -111,12 +128,23 @@ def extrair_nutrientes_do_texto(texto):
                 continue
             if not any(re.search(p, linha_lower) for p in lista_padroes):
                 continue
-            # Busca o primeiro número na linha atual, caso não ache, tenta a próxima
+
             nums = re.findall(r'\d[\d,\.]*', linha)
             if not nums and i + 1 < len(linhas):
                 nums = re.findall(r'\d[\d,\.]*', linhas[i + 1])
+
             if nums:
-                resultado[nome] = nums[0]
+                # Para valor energético, pega o maiornúmero da linha:
+                # kcal é sempre maior que o %VD (1-2 dígitos) que aparece
+                # na mesma linha.
+                # Para carboidratos, mesmo critério: o valor em g é sempre
+                # maior que o %VD e menor que o valor de kcal 
+                # o maior número da linha de carboidratos é o valor correto.
+                try:
+                    valores_float = [float(n.replace(',', '.')) for n in nums]
+                    resultado[nome] = nums[valores_float.index(max(valores_float))]
+                except ValueError:
+                    resultado[nome] = nums[0]
 
     return resultado
 
@@ -159,6 +187,8 @@ def comparar_com_api(valores_ocr, energia_api, carbo_api, tolerancia=0.10):
 
     Exibe uma tabela com: valor OCR | valor API | status da comparação.
     """
+    
+    
     print("\n" + "=" * 54)
     print("    COMPARAÇÃO  OCR x API OPEN FOOD FACTS")
     print("=" * 54)
@@ -181,6 +211,7 @@ def comparar_com_api(valores_ocr, energia_api, carbo_api, tolerancia=0.10):
                 v_api = float(val_api)
                 diff  = abs(v_ocr - v_api) / v_api if v_api != 0 else 1.0
                 status = "✓ COMPATÍVEL" if diff <= tolerancia else f"✗ DIVERGENTE ({diff*100:.0f}%)"
+                
             except ValueError:
                 status = "⚠  Valor inválido"
 
@@ -192,11 +223,11 @@ def comparar_com_api(valores_ocr, energia_api, carbo_api, tolerancia=0.10):
 
 
 
-# Leitura dos códigos de barras a partir do arquivo .txt
+# Leitura dos códigos de barras a partir do Barcodes.txt
 def carregar_barcodes(caminho: str) -> set[str]:
    
     if not os.path.exists(caminho):
-        print(f"[ERRO] Arquivo '{caminho}' não encontrado.")
+        print(f" Arquivo '{caminho}' não encontrado.")
         return set()
 
     barcodes = set()
@@ -206,7 +237,7 @@ def carregar_barcodes(caminho: str) -> set[str]:
             if codigo:
                 barcodes.add(codigo)
 
-    print(f"{len(barcodes)} código(s) de barras únicos carregados de '{caminho}'")
+    print(f"[INFO] {len(barcodes)} código(s) de barras únicos carregados de '{caminho}'")
     return barcodes
 
 
@@ -320,7 +351,7 @@ def processar_rotulo(barcode: str):
                     tabela_bgr = img_cv2[y_min:y_max, x_min:x_max]
 
         if tabela_bgr is None or tabela_bgr.size == 0:
-            print("Usando a imagem inteira")
+            print("[INFO] Fallback Supremo: Usando a imagem inteira.")
             tabela_bgr = img_cv2.copy()
             cv2.rectangle(img_poligonos_ext, (0, 0), (w-1, h-1), (0, 0, 255), 6)
 
@@ -350,13 +381,7 @@ def processar_rotulo(barcode: str):
 
         # Recorte
         if caixas_validas:
-            bx, by, bw, bh = caixas_validas[0]
-            # Sanity check: um título legítimo ocupa uma fração pequena da
-            # altura da tabela. Se o fechamento morfológico fundiu várias
-            # linhas em um único blob (comum em rótulos com muitos
-            # nutrientes, onde os espaçamentos verticais são menores que o
-            # kernel_int), bh fica próximo de h_tab e esse box é descartado
-            # — y_div cai no fallback de 15% abaixo.
+            bx, by, bw, bh = caixas_validas[0]            
             if bh < h_tab * 0.25:
                 cv2.rectangle(img_divisoria_debug, (bx, by), (bx+bw, by+bh), (0, 255, 0), 2)
                 y_div = by + bh + 3
@@ -416,7 +441,7 @@ def processar_rotulo(barcode: str):
 
         plt.tight_layout()
 
-        # Salva a figura em /imgs
+        # Salva a figura completa em /imgs
         os.makedirs(PASTA_IMGS, exist_ok=True)
         caminho_img = os.path.join(PASTA_IMGS, f"{barcode}.jpg")
         plt.savefig(caminho_img, dpi=150, bbox_inches="tight")
@@ -426,6 +451,7 @@ def processar_rotulo(barcode: str):
 
     except Exception as e:
         print(f"Erro: {e}")
+
 
 
 # Fluxo principal
@@ -442,6 +468,8 @@ def main():
         print("#" * 60)
         processar_rotulo(barcode)
 
+
+    
 
 if __name__ == "__main__":
     main()
