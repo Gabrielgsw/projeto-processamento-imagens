@@ -135,11 +135,10 @@ def extrair_nutrientes_do_texto(texto):
 
             if nums:
                 # Para valor energético, pega o maiornúmero da linha:
-                # kcal é sempre maior que o %VD (1-2 dígitos) que aparece
-                # na mesma linha.
+                # kcal é sempre maior que o %VD (1-2 dígitos) que aparece na mesma linha                
                 # Para carboidratos, mesmo critério: o valor em g é sempre
                 # maior que o %VD e menor que o valor de kcal 
-                # o maior número da linha de carboidratos é o valor correto.
+                # o maior número da linha de carboidratos é o valor correto
                 try:
                     valores_float = [float(n.replace(',', '.')) for n in nums]
                     resultado[nome] = nums[valores_float.index(max(valores_float))]
@@ -237,7 +236,7 @@ def carregar_barcodes(caminho: str) -> set[str]:
             if codigo:
                 barcodes.add(codigo)
 
-    print(f"[INFO] {len(barcodes)} código(s) de barras únicos carregados de '{caminho}'")
+    print(f"{len(barcodes)} código(s) de barras únicos carregados de '{caminho}'")
     return barcodes
 
 
@@ -351,7 +350,7 @@ def processar_rotulo(barcode: str):
                     tabela_bgr = img_cv2[y_min:y_max, x_min:x_max]
 
         if tabela_bgr is None or tabela_bgr.size == 0:
-            print("[INFO] Fallback Supremo: Usando a imagem inteira.")
+            print("Usando a imagem inteira.")
             tabela_bgr = img_cv2.copy()
             cv2.rectangle(img_poligonos_ext, (0, 0), (w-1, h-1), (0, 0, 255), 6)
 
@@ -445,7 +444,7 @@ def processar_rotulo(barcode: str):
         os.makedirs(PASTA_IMGS, exist_ok=True)
         caminho_img = os.path.join(PASTA_IMGS, f"{barcode}.jpg")
         plt.savefig(caminho_img, dpi=150, bbox_inches="tight")
-        print(f"[INFO] Figura salva em '{caminho_img}'")
+        print(f"Figura salva em '{caminho_img}'")
 
         plt.show()
 
